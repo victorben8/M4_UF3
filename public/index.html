@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>ENTI Survivors</title>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.55.2/phaser-arcade-physics.min.js" integrity="sha512-3ggJ43PNjH5aQCsd8/CBKa18RPMR8OaQX0JvHCZ4iJO/2Jk9mLdVZYVGFVUJmIoKeoF9Hg1pVgmROv9+xpgQlQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	</head>
+	<body>
+		<h1>Welcome to ENTI Survivors</h1>
+		<form>
+			<section id="difficulty-selection">
+				<p><label for="medium">Dificulty</label></p>
+				<ol>
+					<li>
+						<input type="radio" id="easy" name="difficulty"/>
+						<label for="easy">Easy</label>
+					</li>
+					<li>
+						<input type="radio" id="medium" name="difficulty" checked/>
+						<label for="medium">Medium</label>
+					</li>
+					<li>
+						<input type="radio" id="hard" name="difficulty"/>
+						<label for="hard">Pro player</label>
+					</li>
+				</ol>
+			</section>
+			<section id="game-choose">
+				<button type="button" id="increment" onclick="setIncrement(); return false;">Increment</button>
+				<button type="button" id="decrement" onclick="setDecrement(); return false;">Decrement</button>
+			</section>
+			<section>
+				<button type="button" id="play-button" onclick="startGame(); return false;">Play</button>
+			</section>
+		</form>
+		<script>
+
+			const config = {
+				width: 960,
+				height: 540,
+				physics: {
+			        default: 'arcade',
+			        arcade: {
+			            debug: true
+			        }
+			    },
+				scene: {
+					preload: precarga,
+					create: crear,
+					update: actualiza
+				}
+			};
+
+			const game = new Phaser.Game(config);
+			
+			let player;
+			let enemies = [];
+			let enemies_offset = 5;
+			let enemies_pos = [
+				{x: 0, y: -enemies_offset},
+				{x: config.width / 3, y: -enemies_offset},
+				{x: 2 * config.width / 3, y: -enemies_offset},
+				{x: config.width, y: -enemies_offset},
+				{x: -enemies_offset, y: config.height / 2},
+				{x: config.width + enemies_offset, y: config.height / 2},
+				{x: 0, y: config.height + enemies_offset},
+				{x: config.width / 3, y: config.height + enemies_offset},
+				{x: 2 * config.width / 3, y: config.height + enemies_offset},
+				{x: config.width, y: config.height + enemies_offset}
+			];
+
+			let enemies_max = 28;
+
+			let player_speed = 3;
+			let player_weapon;
+			let weapon_offset = 48;
+			
+			let score = 0 
+			let text_score;
+
+			let timer = -1;
+			let text_timer;
+
+			let endStageText;
+
+			let keyLeft;
+			let keyRight;
+			let keyUp;
+			let keyDown;
+			
+			let gameObject;
+			let start = false;
+			let difficulty;
+			let gameType = "increment";
+
+			let enemySpawn;
+			let weaponSpawn;
+			let timerSpawn;
+
+			function getDifficulty () {
+
+				let list = document.getElementsByName("difficulty");
+
+				for (let i = 0; i < list.length; i++) {
+					if (list[i].checked) {
+						return list[i].id;
+					}
+				}
+			}
+
+			function setIncrement () {
+				gameType = "increment";
+			}
+
+			function setDecrement () {
+				gameType = "decrement";
+			}
+
+			function setDifficulty () {
+				
+				difficulty = getDifficulty();
+			}
+
+			function precarga () {
+
+				this.load.image("player-img", "imgs/player.png");
+				this.load.image("bg-img", "imgs/background.png");
+				
+				for (let i = 1; i <= enemies_max; i++) {
+					this.load.image("enemy-" + i, "imgs/enemy" + i + ".png");
+				}
+
+				this.load.image("metal-bat", "imgs/bat_metal.png");
+			}
+
+			function crear () {
+
+				let bg = this.add.image(config.width / 2, config.height / 2, "bg-img");
+
+				player = this.add.image(config.width / 2, config.height / 2, "player-img");
+				
+				this.physics.add.existing(player, false);
+				player.body.setCollideWorldBounds(true);
+				
+				player_weapon = this.add.image(config.width / 2 - weapon_offset, config.height / 2, "metal-bat");
+				this.physics.add.existing(player_weapon, false);
+				
+				player_weapon.visible = false;
+
+				key_left = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
+				key_right= this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
+				key_up = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+				key_down = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
+
+				text_score = this.add.text(24, 24, "Score: 0", {font: '600 36px Arial', color: '#000000'});
+				text_timer = this.add.text(3 * config.width / 4, 24, "Time: 0", {font: '600 36px Arial', color: '#ffffff'});
+				endStageText = this.add.text(config.width / 3, config.height / 2, "", {font: '600 50px Arial', color: '#000000'});
+
+				this.physics.add.collider(enemies, player);
+				
+				gameObject = this
+			}
+			
+			function startGame () {
+
+				setDifficulty();
+				start = true;
+				endStageText.setText("");
+				
+				for (let i = 0; i < enemies.length; i++) {
+					enemies[i].visible = false;
+					gameObject.physics.world.disable(enemies[i]);
+				}
+
+				weaponSpawn = setInterval(() => {
+					
+					player_weapon.visible = true;
+					gameObject.physics.world.enable(player_weapon);
+
+					setTimeout(() => {
+						player_weapon.visible = false;
+						gameObject.physics.world.disable(player_weapon);
+					}, 400);
+
+				}, 2000);
+
+				if (gameType == "increment") {
+					
+					timer = 0;
+
+					timerSpawn = setInterval(() => {
+				
+						timer++;
+						text_timer.setText("Time: " + timer);
+
+					}, 1000);
+
+				} else if (gameType == "decrement") {
+					
+					timer = 10;
+
+					timerSpawn = setInterval(() => {
+				
+						timer--;
+						text_timer.setText("Time: " + timer);
+
+					}, 1000);
+				}
+
+				enemySpawn = setInterval(() => {
+					switch(difficulty) {
+						case "easy":
+							for (let i = 0; i < 2; i++) {
+
+								let pos = Math.floor(Math.random() * enemies_pos.length) 
+								let enemyImage = "enemy-" + Math.floor(Math.random() * enemies_max + 1);
+								let enemy = gameObject.add.sprite(enemies_pos[pos].x, enemies_pos[pos].y , enemyImage);
+								gameObject.physics.add.existing(enemy, false);
+								enemies.push(enemy);
+							}
+							break;
+
+						case "medium":
+							for (let i = 0; i < 5; i++) {
+
+								let pos = Math.floor(Math.random() * enemies_pos.length) 
+								let enemyImage = "enemy-" + Math.floor(Math.random() * enemies_max + 1);
+								let enemy = gameObject.add.sprite(enemies_pos[pos].x, enemies_pos[pos].y , enemyImage);
+								gameObject.physics.add.existing(enemy, false);
+								enemies.push(enemy);
+							}
+							break;
+						
+						case "hard":
+							for (let i = 0; i < 10; i++) {
+
+								let pos = Math.floor(Math.random() * enemies_pos.length) 
+								let enemyImage = "enemy-" + Math.floor(Math.random() * enemies_max + 1);
+								let enemy = gameObject.add.sprite(enemies_pos[pos].x, enemies_pos[pos].y , enemyImage);
+								gameObject.physics.add.existing(enemy, false);
+								enemies.push(enemy);
+							}
+							break;
+					}
+				}, 5000);
+			}
+
+			function endStage () {
+				endStageText.setText("End Stage");
+				clearInterval(enemySpawn);
+				clearInterval(weaponSpawn);
+				clearInterval(timerSpawn);
+			}
+				
+
+			let last_dir = "L";
+			let last_x = config.width / 2;
+			let last_y = config.height / 2;
+
+			function actualiza () {
+			
+				if (timer == 0 && gameType == "decrement") {	
+					console.log(timer);
+					endStage();
+					return;
+				}
+
+				if (key_left.isDown) {
+					player.x -= player_speed;
+					last_x = player.x;
+					last_y = player.y;
+					last_dir = "L";
+				}
+				else if (key_right.isDown) {
+					player.x += player_speed;
+					last_x = player.x;
+					last_y = player.y;
+					last_dir = "R";
+				}
+				
+				if (key_up.isDown) {
+					player.y -= player_speed;
+					last_x = player.x;
+					last_y = player.y;
+					last_dir = "U";
+				}
+				else if (key_down.isDown) {
+					player.y += player_speed;
+					last_x = player.x;
+					last_y = player.y;
+					last_dir = "D";
+				}
+
+				for (let i= 0; i < enemies.length; i++) {
+					this.physics.moveToObject(enemies[i], player);
+					
+					if (this.physics.collide(player_weapon, enemies[i])) {
+						console.log("Contact with enemie " + i);
+						enemies[i].visible = false;
+						this.physics.world.disable(enemies[i]);
+						score ++;
+						text_score.setText("Score: " + score);
+					}
+				}
+
+				switch (last_dir) {
+				
+					case "L":
+						player_weapon.x = player.x - weapon_offset;
+						player_weapon.y = player.y;
+						player_weapon.rotation = 180 * Math.PI / 180;
+						break;
+
+					case "R":
+						player_weapon.x = player.x + weapon_offset;
+						player_weapon.y = player.y;
+						player_weapon.rotation = 0;
+						break;
+
+					case "U":
+						player_weapon.x = player.x;
+						player_weapon.y = player.y - weapon_offset;
+						player_weapon.rotation = 270 * Math.PI / 180;
+						break;
+
+					case "D":
+						player_weapon.x = player.x;
+						player_weapon.y = player.y + weapon_offset;
+						player_weapon.rotation = 90 * Math.PI / 180;
+						break;
+				}
+
+			}
+
+		</script>
+	</body>
+</html>
